@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Configures the Camel Context-->
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:amq="http://activemq.apache.org/schema/core"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd
+       http://activemq.apache.org/schema/core http://activemq.apache.org/schema/core/activemq-core.xsd">
+
+  <!-- This creates an embedded ActiveMQ Broker 
+  <broker xmlns="http://activemq.apache.org/schema/core" useJmx="true" persistent="false">
+    <transportConnectors>
+      <transportConnector uri="tcp://localhost:61616" />
+    </transportConnectors>
+  </broker>
+-->
+  <!-- Lets connect the Camel ActiveMQ component to the embedded broker.
+       See http://camel.apache.org/activemq.html for more information.
+  -->
+ <!-- 
+  <bean id="activemq" class="org.apache.activemq.camel.component.ActiveMQComponent">
+    <property name="brokerURL" value="failover:tcp://localhost:61616"/>
+  </bean>
+ -->
+  <!-- Here is a sample which processes the input files
+         (leaving them in place - see the 'noop' flag), and
+         sends them on a JMS queue. This queue is watched by
+         another route which then performs content based
+         routing on the messages using XPath. 
+  -->
+  <camelContext xmlns="http://camel.apache.org/schema/spring">
+    <restConfiguration component="jetty"
+                       bindingMode="json"
+                       contextPath="/camel-example-servlet-rest-blueprint/rest"
+                       port="8080">
+    </restConfiguration>
+<rest path="/customers/">
+  <get uri="/test/{custId}">
+    <to uri="direct:db"/>
+  </get>
+<!--   
+  <get uri="/{id}/orders">
+    <to uri="direct:customerOrders"/>
+  </get>
+  <post uri="/neworder">
+    <to uri="direct:customerNewOrder"/>
+  </post>
+ -->
+</rest>
+
+<route>
+  <from uri="direct:test"/>
+  <log message="${body} and ${headers}"/>
+</route>
+  <route>
+ <!-- 
+          <from uri="file:///tmp/src/data?noop=true"/>
+          <to uri="activemq:personnel.records"/>
+            <log message="Done: ${body}"/>
+ -->  
+            <from uri="direct:db"/>
+            <log message="Done: ${header.custId} from rest call"/>
+ 		<convertBodyTo type="java.lang.String"></convertBodyTo>
+	      <setHeader headerName="mydata">
+	      	<!--<simple>${body}</simple>-->
+          <simple>${header.custId}</simple>
+	      </setHeader>    
+    <setBody>
+<!--       <constant>
+	    insert into demotable values('123',:?mydata)
+	    </constant>
+ -->    
+<constant>
+      select * from demotable where id=:?mydata
+      </constant>
+
+    </setBody>
+    <to uri="jdbc:dataSource?useHeadersAsParameters=true"/>
+  </route>
+<!--   <route>
+    <from uri="activemq:personnel.records"/>
+    <choice>
+      <when>
+        <xpath>/person/city = 'London'</xpath>
+        <to uri="file:target/messages/uk"/>
+      </when>
+      <otherwise>
+        <to uri="file:target/messages/others"/>
+      </otherwise>
+    </choice>
+  </route>
+ -->
+ </camelContext>
+
+<bean id="dataSource" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close">
+  <property name="driverClassName" value="org.mariadb.jdbc.Driver"/>
+  <property name="url" value="jdbc:mariadb://localhost:3306/demodb"/>
+  <property name="username" value="demouser"/>
+  <property name="password" value="password"/>
+</bean>
+
+</beans>
